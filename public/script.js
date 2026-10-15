@@ -9,9 +9,73 @@ const formTitle = document.querySelector('#form-title');
 const saveButton = document.querySelector('#save-button');
 const cancelButton = document.querySelector('#cancel-button');
 
-const projects = [];
+const STORAGE_KEY = 'workshop-projects-v1';
+
+let projects = [];
 let nextId = 1;
 let editingId = null;
+let storageReady = false;
+
+// Load saved projects when the page starts
+function loadProjects() {
+  try {
+    const savedText = localStorage.getItem(STORAGE_KEY);
+
+    if (savedText === null) {
+      projects = [];
+      storageReady = true;
+      renderProjects();
+      return;
+    }
+
+    const savedProjects = JSON.parse(savedText);
+
+    const valid =
+      Array.isArray(savedProjects) &&
+      savedProjects.every(project =>
+        project !== null &&
+        typeof project === 'object' &&
+        Number.isSafeInteger(project.id) &&
+        project.id > 0 &&
+        typeof project.name === 'string' &&
+        ['Planned', 'In Progress', 'Completed'].includes(project.status)
+      ) &&
+      new Set(savedProjects.map(project => project.id)).size ===
+        savedProjects.length;
+
+    if (!valid) {
+      message.textContent =
+        'Saved project data is invalid. Existing saved data was not changed.';
+      renderProjects();
+      return;
+    }
+
+    projects = savedProjects;
+    nextId = projects.reduce(
+      (largest, project) => Math.max(largest, project.id),
+      0
+    ) + 1;
+
+    storageReady = true;
+    renderProjects();
+  } catch (error) {
+    message.textContent =
+      'Could not load saved projects. Check browser storage and try again.';
+    renderProjects();
+  }
+}
+
+// Convert projects to text and save them
+function saveProjects() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
+    return true;
+  } catch (error) {
+    message.textContent =
+      'Changes could not be saved. Check browser storage space or permissions.';
+    return false;
+  }
+}
 
 function renderProjects() {
   projectList.replaceChildren();
@@ -22,7 +86,6 @@ function renderProjects() {
 
     details.textContent = `${project.name} - ${project.status} `;
 
-    // Edit button
     const editButton = document.createElement('button');
     editButton.type = 'button';
     editButton.textContent = 'Edit';
@@ -40,12 +103,9 @@ function renderProjects() {
       nameInput.focus();
     });
 
-    // Delete button
     const deleteButton = document.createElement('button');
     deleteButton.type = 'button';
     deleteButton.textContent = 'Delete';
-
-    // Store the stable project ID on the button
     deleteButton.dataset.projectId = String(project.id);
 
     deleteButton.addEventListener('click', () => {
@@ -63,13 +123,11 @@ function renderProjects() {
         `Delete project "${selectedProject.name}"?`
       );
 
-      // Cancel: do not change the collection
       if (!confirmed) {
         message.textContent = 'Deletion cancelled.';
         return;
       }
 
-      // Confirm: remove only the selected ID
       const index = projects.findIndex(
         item => item.id === selectedId
       );
@@ -78,14 +136,22 @@ function renderProjects() {
         return;
       }
 
+      const deletedProject = projects[index];
       projects.splice(index, 1);
 
-      // If the deleted project was being edited, reset the form
       if (editingId === selectedId) {
         resetForm();
       }
 
-      message.textContent = 'Project deleted successfully.';
+      if (saveProjects()) {
+        message.textContent = 'Project deleted successfully.';
+      } else {
+        // Restore the project if saving failed
+        projects.splice(index, 0, deletedProject);
+        renderProjects();
+        return;
+      }
+
       renderProjects();
     });
 
@@ -110,6 +176,12 @@ function resetForm() {
 form.addEventListener('submit', event => {
   event.preventDefault();
 
+  if (!storageReady) {
+    message.textContent =
+      'Projects are not loaded safely. Refresh or check the saved data before making changes.';
+    return;
+  }
+
   const name = nameInput.value.trim();
   const status = statusInput.value;
 
@@ -124,20 +196,44 @@ form.addEventListener('submit', event => {
       item => item.id === editingId
     );
 
-    if (project) {
-      project.name = name;
-      project.status = status;
+    if (!project) {
+      resetForm();
+      renderProjects();
+      message.textContent = 'Project not found. Please try again.';
+      return;
     }
 
-    message.textContent = 'Project updated successfully.';
+    const oldName = project.name;
+    const oldStatus = project.status;
+
+    project.name = name;
+    project.status = status;
+
+    if (!saveProjects()) {
+      project.name = oldName;
+      project.status = oldStatus;
+      renderProjects();
+      return;
+    }
+
+    message.textContent = 'Project updated and saved successfully.';
   } else {
-    projects.push({
-      id: nextId++,
+    const newProject = {
+      id: nextId,
       name: name,
       status: status
-    });
+    };
 
-    message.textContent = 'Project added successfully.';
+    projects.push(newProject);
+
+    if (!saveProjects()) {
+      projects.pop();
+      renderProjects();
+      return;
+    }
+
+    nextId++;
+    message.textContent = 'Project added and saved successfully.';
   }
 
   resetForm();
@@ -149,4 +245,4 @@ cancelButton.addEventListener('click', () => {
   message.textContent = 'Edit cancelled.';
 });
 
-renderProjects();
+loadProjects();
