@@ -1,3 +1,4 @@
+
 const form = document.querySelector('#project-form');
 const nameInput = document.querySelector('#name');
 const statusInput = document.querySelector('#status');
@@ -21,6 +22,7 @@ function renderProjects() {
 
     details.textContent = `${project.name} - ${project.status} `;
 
+    // Edit button
     const editButton = document.createElement('button');
     editButton.type = 'button';
     editButton.textContent = 'Edit';
@@ -29,31 +31,62 @@ function renderProjects() {
       editingId = project.id;
       nameInput.value = project.name;
       statusInput.value = project.status;
+
       formTitle.textContent = 'Edit Project';
-      saveButton.textContent = 'Update Project';
+      saveButton.textContent = 'Save changes';
       cancelButton.hidden = false;
-      message.textContent = 'Edit the project and click Update Project.';
+
+      message.textContent = 'Edit the project and save your changes.';
       nameInput.focus();
     });
 
+    // Delete button
     const deleteButton = document.createElement('button');
     deleteButton.type = 'button';
     deleteButton.textContent = 'Delete';
-    deleteButton.style.marginLeft = '8px';
+
+    // Store the stable project ID on the button
+    deleteButton.dataset.projectId = String(project.id);
 
     deleteButton.addEventListener('click', () => {
-      const index = projects.findIndex(item => item.id === project.id);
+      const selectedId = Number(deleteButton.dataset.projectId);
 
-      if (index !== -1) {
-        projects.splice(index, 1);
+      const selectedProject = projects.find(
+        item => item.id === selectedId
+      );
+
+      if (!selectedProject) {
+        return;
       }
 
-      if (editingId === project.id) {
+      const confirmed = window.confirm(
+        `Delete project "${selectedProject.name}"?`
+      );
+
+      // Cancel: do not change the collection
+      if (!confirmed) {
+        message.textContent = 'Deletion cancelled.';
+        return;
+      }
+
+      // Confirm: remove only the selected ID
+      const index = projects.findIndex(
+        item => item.id === selectedId
+      );
+
+      if (index === -1) {
+        return;
+      }
+
+      projects.splice(index, 1);
+
+      // If the deleted project was being edited, reset the form
+      if (editingId === selectedId) {
         resetForm();
       }
 
+      message.textContent = 'Project deleted successfully.';
       renderProjects();
-      message.textContent = 'Project deleted.';
     });
 
     listItem.append(details, editButton, deleteButton);
@@ -68,6 +101,7 @@ function renderProjects() {
 function resetForm() {
   form.reset();
   editingId = null;
+
   formTitle.textContent = 'Add a Project';
   saveButton.textContent = 'Save Project';
   cancelButton.hidden = true;
@@ -86,7 +120,9 @@ form.addEventListener('submit', event => {
   }
 
   if (editingId !== null) {
-    const project = projects.find(item => item.id === editingId);
+    const project = projects.find(
+      item => item.id === editingId
+    );
 
     if (project) {
       project.name = name;
